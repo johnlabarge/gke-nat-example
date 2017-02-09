@@ -1,0 +1,140 @@
+# Copyright 2016 Google Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+resources:
+######## Network ############
+- name: gke-nat-network
+  type: compute.v1.network
+  properties: 
+    autoCreateSubnetworks: false
+######### Subnets ##########
+######### For Cluster #########
+- name: gke-cluster-subnet 
+  type: compute.v1.subnetwork
+  properties:
+    network: $(ref.gke-nat-network.selfLink)
+    ipCidrRange: 172.16.0.0/12
+    region: us-central1
+########## NAT Subnet ##########
+- name: nat-subnet
+  type: compute.v1.subnetwork
+  properties: 
+    network: $(ref.gke-nat-network.selfLink)
+    ipCidrRange: 10.1.1.0/24
+    region: us-central1
+########## NAT VM ##########
+- name: nat-vm
+  type: compute.v1.instance 
+  properties:
+    zone: us-central1-b
+    canIpForward: true
+    tags:
+      items:
+      - nat-to-internet
+    machineType: https://www.googleapis.com/compute/v1/projects/{{ env["project"] }}/zones/us-central1-b/machineTypes/f1-micro
+    disks:
+      - deviceName: boot
+        type: PERSISTENT
+        boot: true
+        autoDelete: true
+        initializeParams:
+          sourceImage: https://www.googleapis.com/compute/v1/projects/debian-cloud/global/images/debian-7-wheezy-v20150423
+    networkInterfaces:
+    - network: projects/{{ env["project"] }}/global/networks/gke-nat-network
+      subnetwork: $(ref.nat-subnet.selfLink)
+      accessConfigs:
+      - name: External NAT
+        type: ONE_TO_ONE_NAT
+    metadata:
+      items:
+      - key: startup-script
+        value: |
+          #!/bin/sh
+          # --
+          # ---------------------------
+          # Install TCP DUMP
+          # Start nat; start dump
+          # ---------------------------
+          apt-get update
+          apt-get install -y tcpdump
+          apt-get install -y tcpick 
+          iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+          nohup tcpdump -e -l -i eth0 -w /tmp/nat.pcap &
+          nohup tcpdump -e -l -i eth0 > /tmp/nat.txt &
+          echo 1 | tee /proc/sys/net/ipv4/ip_forward
+########## FIREWALL RULES FOR NAT VM ##########
+- name: nat-vm-firewall 
+  type: compute.v1.firewall
+  properties: 
+    allowed:
+    - IPProtocol : tcp
+      ports: []
+    sourceTags: 
+    - route-through-nat
+    network: $(ref.gke-nat-network.selfLink)
+- name: nat-vm-ssh
+  type: compute.v1.firewall
+  properties: 
+    allowed:
+    - IPProtocol : tcp
+      ports: [22]
+    sourceRanges: 
+    - 0.0.0.0/0
+    network: $(ref.gke-nat-network.selfLink)
+########## GKE CLUSTER CREATION ##########
+- name: nat-gke-cluster
+  type: container.v1.cluster
+  metadata: 
+   dependsOn:
+   - gke-nat-network 
+   - gke-cluster-subnet
+  properties: 
+    cluster: 
+      name: nat-gke-cluster 
+      initialNodeCount: 3
+      network: gke-nat-network
+      subnetwork: gke-cluster-subnet
+      nodeConfig:
+        tags:
+        - route-through-nat
+    zone: us-central1-b
+########## GKE MASTER ROUTE ##########
+- name: master-route
+  type: compute.v1.route
+  properties:
+    destRange: $(ref.nat-gke-cluster.endpoint)
+    network: $(ref.gke-nat-network.selfLink)
+    nextHopGateway: projects/{{ env["project"] }}/global/gateways/default-internet-gateway
+    priority: 100
+    tags:
+    - route-through-nat
+########## NAT ROUTE ##########
+- name: gke-cluster-route-through-nat
+  metadata: 
+    dependsOn:
+    - nat-gke-cluster  
+    - gke-nat-network
+  type: compute.v1.route
+  properties: 
+    network: $(ref.gke-nat-network.selfLink)
+    destRange: 0.0.0.0/0
+    description: "route all other traffic through nat"
+    nextHopInstance: $(ref.nat-vm.selfLink)
+    tags:
+    - route-through-nat
+    priority: 800
+
+  
+
+ 

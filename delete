@@ -1,0 +1,7 @@
+#!/bin/sh
+gcloud compute routes delete master-route -q                 
+gcloud compute routes delete gke-cluster-route-through-nat -q
+gcloud container clusters delete nat-gke-cluster -q    
+gcloud compute instances delete nat-vm -q                         
+gcloud compute firewall-rules delete nat-vm-firewall  -q 
+gcloud deployment-manager deployments delete gke-with-nat -q            

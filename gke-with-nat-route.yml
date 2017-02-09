@@ -1,0 +1,7 @@
+imports:
+- path: gke-with-nat-route.jinja
+resources:
+- name: gke-with-nat-route
+  type: gke-with-nat-route.jinja
+  properties:
+    zone: us-central1-b                  

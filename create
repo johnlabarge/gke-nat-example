@@ -1,0 +1,24 @@
+#!/bin/sh
+
+gcloud deployment-manager deployments create gke-with-nat --config gke-with-nat-route.yml
+gcloud container clusters  get-credentials nat-gke-cluster
+
+kubectl apply -f kubernetes/nginx-pod.yml
+echo "waiting for 10 seconds for  pod to start" 
+sleep 10
+POD=$(kubectl get pods | grep frontend | awk '{print $1}')
+
+echo "installing curl on container" 
+kubectl exec -it $POD -- apt-get update
+kubectl exec -it $POD -- apt-get install -y curl
+
+echo "Making request to facebook to test connectivity through container" 
+kubectl exec -it $POD curl https://www.facebook.com > facebook-curl.html
+
+echo "Copying packet captures from nat locally." 
+## YOU CAN UNCOMMENT THIS IF YOU WANT BUT THE PCAP FILE IS QUITE LARGE ## 
+#gcloud compute copy-files nat-vm:/tmp/nat.pcap nat.pcap
+##
+gcloud compute copy-files nat-vm:/tmp/nat.txt nat.txt 
+
+
