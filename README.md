@@ -3,7 +3,7 @@ This set of scripts creates a Google Cloud Container Engine cluster that
 routes all outbound internet traffic. Traffic heading for the kubernetes master is routed at a higher priority through the default internet gateway. 
 through a NAT instance. 
 
-####How it works in a nutshell
+#### How it works in a nutshell
 
 1. Creates a network
 2. Creates a subnet for the cluster 
@@ -14,7 +14,7 @@ through a NAT instance.
 7. Creates the route from the cluster to the master for instances with tag, route-through-nat
 8. Creates the NAT route from the cluster to the NAT for all destinations at a lower priority than the master route above for instances with tag route-through-nat
 
-####Creating the cluster 
+#### Creating the cluster 
 
 ###### Prerequisites 
 
